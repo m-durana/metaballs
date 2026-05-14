@@ -296,11 +296,21 @@ export function mountField(canvas, cards) {
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
+  // Frame cadence cap. Animations in this loop are dt-driven, so capping
+  // the rAF body to ~30 FPS halves CPU/GPU work without changing motion
+  // timing. We still schedule rAF every native vsync so we can resume
+  // cleanly the moment the throttle interval elapses.
+  const TARGET_FPS = 30;
+  const FRAME_INTERVAL_MS = 1000 / TARGET_FPS;
+
   let dpr = 1;
   let canvasW = 0;
   let canvasH = 0;
   function resize() {
-    dpr = Math.min(window.devicePixelRatio || 1, 1.25);
+    // DPR clamped to 1 — the metaball field is a soft, low-frequency
+    // image and doesn't benefit visibly from 1.25× oversampling on
+    // hi-DPI screens, but the extra pixels cost ~56% more fragment work.
+    dpr = Math.min(window.devicePixelRatio || 1, 1.0);
     canvasW = Math.round(window.innerWidth * dpr);
     canvasH = Math.round(window.innerHeight * dpr);
     canvas.width = canvasW;
@@ -338,14 +348,31 @@ export function mountField(canvas, cards) {
   const centerBuf   = new Float32Array(NCARDS * 2);
   const sizeBuf     = new Float32Array(NCARDS * 2);
 
-  function getCardCenter(el) {
-    const r = el.getBoundingClientRect();
-    return [(r.left + r.width / 2) * dpr, (r.top + r.height / 2) * dpr];
+  // Per-frame rect cache. getBoundingClientRect forces layout, and we
+  // were calling it ~3×NCARDS times per frame; reading once at the top
+  // of frame() and reusing is essentially free.
+  const rectCache = new Array(NCARDS);
+
+  function refreshRectCache() {
+    for (let i = 0; i < NCARDS; i++) {
+      const r = cards[i].el.getBoundingClientRect();
+      rectCache[i] = {
+        cx: (r.left + r.width / 2) * dpr,
+        cy: (r.top + r.height / 2) * dpr,
+        hx: (r.width / 2) * dpr,
+        hy: (r.height / 2) * dpr,
+      };
+    }
   }
 
-  function getCardHalfSize(el) {
-    const r = el.getBoundingClientRect();
-    return [(r.width / 2) * dpr, (r.height / 2) * dpr];
+  function getCardCenter(_el, i) {
+    const c = rectCache[i];
+    return [c.cx, c.cy];
+  }
+
+  function getCardHalfSize(_el, i) {
+    const c = rectCache[i];
+    return [c.hx, c.hy];
   }
 
   function evalSlot(p, state, cx, cy, now) {
@@ -659,7 +686,28 @@ export function mountField(canvas, cards) {
   }
 
   let lastT = performance.now();
+  let lastRenderT = lastT;
   function frame(now) {
+    // Skip the body if the document is hidden — nothing to display, so
+    // no need to spin the simulation. lastT is reset on resume so dt
+    // doesn't blow up after long backgrounding.
+    if (document.hidden) {
+      lastT = now;
+      lastRenderT = now;
+      requestAnimationFrame(frame);
+      return;
+    }
+
+    // FPS throttle. Schedule rAF every native frame, but only do work
+    // when at least FRAME_INTERVAL_MS has elapsed since the last render.
+    // The -1 gives the cap a tiny tolerance so we don't oscillate to
+    // ~24 FPS on a 60Hz screen with imperfect timing.
+    if (now - lastRenderT < FRAME_INTERVAL_MS - 1) {
+      requestAnimationFrame(frame);
+      return;
+    }
+    lastRenderT = now;
+
     const dt = Math.min(now - lastT, 100);
     lastT = now;
 
@@ -690,7 +738,8 @@ export function mountField(canvas, cards) {
       else       s.sibHover = Math.max(s.sibHover - sibSpeed, s.sibHoverTarget);
     }
 
-    const centers = cards.map(c => getCardCenter(c.el));
+    refreshRectCache();
+    const centers = cards.map((c, i) => getCardCenter(c.el, i));
 
     for (let i = 0; i < NCARDS; i++) {
       const s = states[i];
@@ -809,7 +858,7 @@ export function mountField(canvas, cards) {
     }
     for (let i = 0; i < NCARDS; i++) {
       const [tx, ty] = centers[i];
-      const half = getCardHalfSize(cards[i].el);
+      const half = getCardHalfSize(cards[i].el, i);
       const hx = half[0], hy = half[1];
       // Sample at center + 4 corners — text fades when ANY part of the
       // chip is engulfed, matching the shader's per-pixel takeover
@@ -899,7 +948,7 @@ export function mountField(canvas, cards) {
       const c = centers[i];
       centerBuf[i * 2]     = c[0];
       centerBuf[i * 2 + 1] = c[1];
-      const half = getCardHalfSize(cards[i].el);
+      const half = getCardHalfSize(cards[i].el, i);
       sizeBuf[i * 2]     = half[0];
       sizeBuf[i * 2 + 1] = half[1];
     }
