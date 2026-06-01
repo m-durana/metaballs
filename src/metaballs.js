@@ -234,7 +234,10 @@ export function mountField(canvas, cards) {
   }
 
   const vs = compileShader(gl, vertSource, gl.VERTEX_SHADER);
-  const fs = compileShader(gl, fragSource, gl.FRAGMENT_SHADER);
+  // Shader bakes NCARDS as a #define; patch it so adding/removing chips
+  // in main.js doesn't require touching the .frag file.
+  const patchedFrag = fragSource.replace(/#define NCARDS \d+/, `#define NCARDS ${NCARDS}`);
+  const fs = compileShader(gl, patchedFrag, gl.FRAGMENT_SHADER);
   const program = linkProgram(gl, vs, fs);
   gl.useProgram(program);
 

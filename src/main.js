@@ -17,6 +17,11 @@ const cards = [
     // the oxblood passport and cream food without muddying overlaps.
     palette: ['#3e7a4a', '#1f3a25', '#6ba56b', '#284a32', '#9bc28d'],
   },
+  {
+    el: document.querySelector('.item.codepen'),
+    // Lilac / iris purples matching the codepen chip's --shA/--shB.
+    palette: ['#5d4ad1', '#2c1f6b', '#b9a7ff', '#3d2c9a', '#8e7af0'],
+  },
 ];
 
 const fieldCanvas = document.getElementById('field');

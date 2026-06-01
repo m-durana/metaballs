@@ -51,8 +51,9 @@ body.ready .back {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 240px));
+  grid-template-columns: repeat(2, minmax(0, 240px));
   column-gap: 4.5rem;
+  row-gap: 2.5rem;
 }
 
 .mobile-effect-note {
@@ -79,6 +80,7 @@ body.ready .back {
 .item.passport { --shA: #d97757; --shB: #b1322a; }
 .item.food     { --shA: #f0e2b8; --shB: #c4a86a; }
 .item.tree     { --shA: #9bc28d; --shB: #3e7a4a; }
+.item.codepen  { --shA: #b9a7ff; --shB: #5d4ad1; }
 
 /* Text-fill gradient is always-on (gradient is mostly white, so the title
    reads white at rest). The shimmer animation is also always declared but
